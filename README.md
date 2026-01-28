@@ -107,7 +107,7 @@ Diferente de frameworks que descobrem erros apenas quando a aplicação sobe, o 
 
 ## Exemplo de Uso
 
-## 🔌 Ativação e Bootstrapping
+## Ativação e Bootstrapping
 
 O KJPA foi desenhado de forma modular. Para que o **Kernon** reconheça e inicialize a infraestrutura de persistência, é necessário utilizar a anotação `@EnablePersistence` na sua classe principal ou de configuração.
 
@@ -160,7 +160,7 @@ public class ClienteService {
     }
 }
 ```
-## 🔍 Sistema de Logs e Diagnóstico
+## Sistema de Logs e Diagnóstico
 O **KJPA** foi projetado para facilitar o debug em tempo de desenvolvimento. Em caso de erro, os logs seguem um padrão estruturado e legível, facilitando a identificação imediata da causa raiz:
 
 ```text
@@ -170,7 +170,7 @@ Ocorreu um erro interno ao inicializar os serviços do Hibernate.
 > Detalhe técnico: Unable to determine Dialect without JDBC metadata.
 ```
 
-## 🏗️ Arquitetura Interna
+## Arquitetura Interna
 O framework utiliza um `TransactionalAspect` que atua como um coordenador central entre a thread de execução e o pool de conexões.
 
 
