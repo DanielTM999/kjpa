@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+
+    <groupId>dtm.database</groupId>
+    <artifactId>project-kjpa</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <modules>
+        <module>kjpa-processor</module>
+        <module>kjpa-core</module>
+        <module>kjpa-annotations</module>
+        <module>kjpa</module>
+    </modules>
+
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <kernon.version>1.1.0</kernon.version>
+        <hikari.cp.version>7.0.2</hikari.cp.version>
+        <hibernate.hikari.cp.version>7.2.0.Final</hibernate.hikari.cp.version>
+        <lombok.version>1.18.42</lombok.version>
+        <hibernate.version>7.2.0.Final</hibernate.version>
+        <jakarta.persistence.api.version>3.2.0</jakarta.persistence.api.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dtm.di</groupId>
+                <artifactId>kernon</artifactId>
+                <version>${kernon.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate.orm</groupId>
+                <artifactId>hibernate-core</artifactId>
+                <version>${hibernate.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>jakarta.persistence</groupId>
+                <artifactId>jakarta.persistence-api</artifactId>
+                <version>${jakarta.persistence.api.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dtm.database</groupId>
+                <artifactId>kjpa-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dtm.database</groupId>
+                <artifactId>kjpa-annotations</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dtm.database</groupId>
+                <artifactId>kjpa-processor</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.zaxxer</groupId>
+                <artifactId>HikariCP</artifactId>
+                <version>${hikari.cp.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate.orm</groupId>
+                <artifactId>hibernate-hikaricp</artifactId>
+                <version>${hibernate.hikari.cp.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+</project>
