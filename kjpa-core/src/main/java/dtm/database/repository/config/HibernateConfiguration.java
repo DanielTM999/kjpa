@@ -2,6 +2,8 @@ package dtm.database.repository.config;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.pool.HikariPool;
+import dtm.database.repository.exceptions.DatabaseInitializationException;
 import dtm.database.repository.prototype.datasource.DatabaseConfiguration;
 import dtm.database.repository.prototype.datasource.EntityManagerFactoryContext;
 import dtm.di.annotations.Component;
@@ -11,7 +13,6 @@ import dtm.di.annotations.aop.DisableAop;
 import dtm.di.application.startup.ManagedApplication;
 import dtm.di.common.ComponentRegistor;
 import dtm.di.core.DependencyContainer;
-import dtm.di.exceptions.DependencyInjectionException;
 import dtm.di.prototypes.async.AsyncRegistrationFunction;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManagerFactory;
@@ -113,7 +114,7 @@ public class HibernateConfiguration {
                     );
                 }
 
-                DependencyInjectionException error = new DependencyInjectionException(detailedMessage, e);
+                DatabaseInitializationException error = new DatabaseInitializationException(detailedMessage, e);
                 ManagedApplication.reportError(error);
                 throw error;
             } catch (ClassLoadingException e) {
@@ -125,7 +126,7 @@ public class HibernateConfiguration {
                 > Solução: Verifique se a dependência do driver (Ex: PostgreSQL ou H2) está presente no seu pom.xml ou build.gradle.
                 """, databaseConfiguration.getDriverClassName());
 
-                DependencyInjectionException error = new DependencyInjectionException("Falha de biblioteca: Driver JDBC não encontrado.", e);
+                DatabaseInitializationException error = new DatabaseInitializationException("Falha de biblioteca: Driver JDBC não encontrado.", e);
                 ManagedApplication.reportError(error);
                 throw error;
             } catch (HibernateException e) {
@@ -137,7 +138,35 @@ public class HibernateConfiguration {
                 > Detalhe técnico: {}
                 """, databaseConfiguration.getDialect(), e.getMessage());
 
-                DependencyInjectionException error = new DependencyInjectionException("Falha interna: Erro de configuração do ORM.", e);
+                DatabaseInitializationException error = new DatabaseInitializationException("Falha interna: Erro de configuração do ORM.", e);
+                ManagedApplication.reportError(error);
+                throw error;
+            }catch (HikariPool.PoolInitializationException e){
+                Throwable rootCause = e.getCause();
+                String realMessage = rootCause != null ? rootCause.getMessage() : e.getMessage();
+                String errorTitle = "[ ERRO DE CONEXÃO NO POOL ]";
+                String solution = "Verifique se o banco de dados está rodando e acessível na URL configurada.";
+
+                boolean isAuthError = realMessage.toLowerCase().contains("password")
+                        || realMessage.toLowerCase().contains("user")
+                        || realMessage.toLowerCase().contains("denied")
+                        || realMessage.contains("28000");
+
+                if (isAuthError) {
+                    errorTitle = "[ ERRO DE AUTENTICAÇÃO ]";
+                    solution = String.format("As credenciais parecem incorretas. Verifique o usuário '%s' e a senha configurada.", databaseConfiguration.getUsername());
+                }
+
+                log.error("""
+            
+                {}
+                O HikariCP falhou ao inicializar a conexão com o banco.
+                > Motivo Real    : {}
+                > Solução        : {}
+                """, errorTitle, realMessage, solution);
+
+                DatabaseInitializationException error = new DatabaseInitializationException(
+                        "Falha ao iniciar Pool de Conexão: " + realMessage, e);
                 ManagedApplication.reportError(error);
                 throw error;
             } catch (Exception e) {
@@ -149,7 +178,7 @@ public class HibernateConfiguration {
                 > Mensagem: {}
                 """, e.getClass().getSimpleName(), e.getMessage());
 
-                DependencyInjectionException error = new DependencyInjectionException("Erro crítico desconhecido ao configurar base de dados.", e);
+                DatabaseInitializationException error = new DatabaseInitializationException("Erro crítico desconhecido ao configurar base de dados.", e);
                 ManagedApplication.reportError(error);
                 throw error;
             }
@@ -224,7 +253,7 @@ public class HibernateConfiguration {
             ╚════════════════════════════════════════════════════════════════════════════╝
             """);
 
-            throw new DependencyInjectionException("A implementação de DatabaseConfiguration não foi fornecida (é nula). Verifique a injeção de dependência.");
+            throw new DatabaseInitializationException("A implementação de DatabaseConfiguration não foi fornecida (é nula). Verifique a injeção de dependência.");
         }
 
         validateField(databaseConfiguration.getDriverClassName(), "Driver Class Name");
@@ -265,7 +294,7 @@ public class HibernateConfiguration {
     private void validateField(String value, String fieldName, boolean permitEmpty) {
         if (!permitEmpty && (value == null || value.trim().isEmpty())) {
             log.error("Falha na validação do banco de dados: O campo '{}' está vazio ou nulo.", fieldName);
-            throw new DependencyInjectionException("Configuração de banco inválida: O campo obrigatório '" + fieldName + "' não foi informado.");
+            throw new DatabaseInitializationException("Configuração de banco inválida: O campo obrigatório '" + fieldName + "' não foi informado.");
         }
     }
 
