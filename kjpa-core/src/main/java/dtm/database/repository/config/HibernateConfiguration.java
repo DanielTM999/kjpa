@@ -31,7 +31,10 @@ public class HibernateConfiguration {
     @Component
     @DisableAop
     @DisableInjectionWarn
-    public AsyncRegistrationFunction<EntityManagerFactoryContext> createSessionFactory(DependencyContainer dependencyContainer, DatabaseConfiguration databaseConfiguration){
+    public AsyncRegistrationFunction<EntityManagerFactoryContext> createSessionFactory(
+            DependencyContainer dependencyContainer,
+            DatabaseConfiguration databaseConfiguration
+    ){
         validDatabaseConfiguration(databaseConfiguration);
 
         return ComponentRegistor.ofAsync(EntityManagerFactoryContext.class, () -> {
@@ -227,7 +230,7 @@ public class HibernateConfiguration {
         validateField(databaseConfiguration.getDriverClassName(), "Driver Class Name");
         validateField(databaseConfiguration.getUrl(), "Database URL");
         validateField(databaseConfiguration.getUsername(), "Database Username");
-        validateField(databaseConfiguration.getPassword(), "Database Password");
+        validateField(databaseConfiguration.getPassword(), "Database Password", true);
         validateField(databaseConfiguration.getDialect(), "Hibernate Dialect");
 
         int size = 60;
@@ -256,7 +259,11 @@ public class HibernateConfiguration {
     }
 
     private void validateField(String value, String fieldName) {
-        if (value == null || value.trim().isEmpty()) {
+        validateField(value, fieldName, false);
+    }
+
+    private void validateField(String value, String fieldName, boolean permitEmpty) {
+        if (!permitEmpty && (value == null || value.trim().isEmpty())) {
             log.error("Falha na validação do banco de dados: O campo '{}' está vazio ou nulo.", fieldName);
             throw new DependencyInjectionException("Configuração de banco inválida: O campo obrigatório '" + fieldName + "' não foi informado.");
         }
