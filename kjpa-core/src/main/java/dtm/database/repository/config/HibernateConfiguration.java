@@ -3,7 +3,7 @@ package dtm.database.repository.config;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.pool.HikariPool;
-import dtm.database.repository.exceptions.DatabaseInitializationException;
+import dtm.database.repository.exceptions.*;
 import dtm.database.repository.prototype.datasource.DatabaseConfiguration;
 import dtm.database.repository.prototype.datasource.EntityManagerFactoryContext;
 import dtm.di.annotations.Component;
@@ -23,6 +23,8 @@ import org.hibernate.boot.registry.StandardServiceRegistryBuilder;
 import org.hibernate.boot.registry.classloading.spi.ClassLoadingException;
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.service.spi.ServiceException;
+
+import java.sql.SQLException;
 
 @Slf4j
 @DisableAop
@@ -94,10 +96,9 @@ public class HibernateConfiguration {
                 > Solução       : Adicione o driver do PostgreSQL ao seu projeto (Maven/Gradle).
                 """, databaseConfiguration.getDriverClassName());
 
-                    detailedMessage = String.format(
-                            "Erro de Dependência: Driver JDBC '%s' não encontrado. Certifique-se de que a dependência do PostgreSQL está no classpath.",
-                            databaseConfiguration.getDriverClassName()
-                    );
+                    DatabaseDriverNotFoundException error = new DatabaseDriverNotFoundException(databaseConfiguration.getDriverClassName(), e);
+                    ManagedApplication.reportError(error);
+                    throw error;
                 } else {
                     log.error("""
                 
@@ -107,16 +108,10 @@ public class HibernateConfiguration {
                 > Detalhe técnico: {}
                 """, databaseConfiguration.getUrl(), e.getMessage());
 
-                    detailedMessage = String.format(
-                            "Erro de Conexão: Falha ao comunicar com o banco em '%s'. Detalhe: %s",
-                            databaseConfiguration.getUrl(),
-                            e.getMessage()
-                    );
+                    DatabaseConnectionException error = new DatabaseConnectionException(databaseConfiguration.getUrl(), e.getMessage(), e);
+                    ManagedApplication.reportError(error);
+                    throw error;
                 }
-
-                DatabaseInitializationException error = new DatabaseInitializationException(detailedMessage, e);
-                ManagedApplication.reportError(error);
-                throw error;
             } catch (ClassLoadingException e) {
                 log.error("""
                 
@@ -126,7 +121,7 @@ public class HibernateConfiguration {
                 > Solução: Verifique se a dependência do driver (Ex: PostgreSQL ou H2) está presente no seu pom.xml ou build.gradle.
                 """, databaseConfiguration.getDriverClassName());
 
-                DatabaseInitializationException error = new DatabaseInitializationException("Falha de biblioteca: Driver JDBC não encontrado.", e);
+                DatabaseDriverNotFoundException error = new DatabaseDriverNotFoundException(databaseConfiguration.getDriverClassName(), e);
                 ManagedApplication.reportError(error);
                 throw error;
             } catch (HibernateException e) {
@@ -138,37 +133,50 @@ public class HibernateConfiguration {
                 > Detalhe técnico: {}
                 """, databaseConfiguration.getDialect(), e.getMessage());
 
-                DatabaseInitializationException error = new DatabaseInitializationException("Falha interna: Erro de configuração do ORM.", e);
+                OrmConfigurationException error = new OrmConfigurationException("Falha interna de configuração do ORM.", e);
                 ManagedApplication.reportError(error);
                 throw error;
             }catch (HikariPool.PoolInitializationException e){
-                Throwable rootCause = e.getCause();
-                String realMessage = rootCause != null ? rootCause.getMessage() : e.getMessage();
-                String errorTitle = "[ ERRO DE CONEXÃO NO POOL ]";
-                String solution = "Verifique se o banco de dados está rodando e acessível na URL configurada.";
-
-                boolean isAuthError = realMessage.toLowerCase().contains("password")
-                        || realMessage.toLowerCase().contains("user")
-                        || realMessage.toLowerCase().contains("denied")
-                        || realMessage.contains("28000");
-
+                SQLException sqlException = findSQLException(e);
+                DatabaseInitializationException errorToThrow;
+                final boolean isAuthError = isIsAuthError(e, sqlException);
+                String realMessage = sqlException != null ? sqlException.getMessage() : e.getMessage();
                 if (isAuthError) {
-                    errorTitle = "[ ERRO DE AUTENTICAÇÃO ]";
-                    solution = String.format("As credenciais parecem incorretas. Verifique o usuário '%s' e a senha configurada.", databaseConfiguration.getUsername());
+                    String user = databaseConfiguration.getUsername();
+
+                    log.error("""
+        
+                    [ ERRO DE AUTENTICAÇÃO ]
+                    O banco recusou a conexão devido a credenciais inválidas.
+                    > Usuário tentado : {}
+                    > Mensagem do DB  : {}
+                    > Solução         : Verifique se o usuário e a senha no arquivo de configuração estão corretos.
+                    """, user, realMessage);
+
+                    errorToThrow = new DatabaseAuthenticationException(
+                            String.format("Falha de Autenticação: Acesso negado para o usuário '%s'. Verifique as credenciais.", user),
+                            e
+                    );
+
+                } else {
+                    log.error("""
+        
+                    [ ERRO DE CONEXÃO NO POOL ]
+                    O HikariCP falhou ao inicializar a conexão (Timeout ou Banco Indisponível).
+                    > URL Alvo     : {}
+                    > Motivo Real  : {}
+                    > Solução      : Verifique se o banco de dados está rodando e acessível nesta URL.
+                    """, databaseConfiguration.getUrl(), realMessage);
+
+                    errorToThrow = new DatabaseConnectionPoolException(
+                            "Falha ao iniciar Pool de Conexão: " + realMessage,
+                            e
+                    );
                 }
 
-                log.error("""
-            
-                {}
-                O HikariCP falhou ao inicializar a conexão com o banco.
-                > Motivo Real    : {}
-                > Solução        : {}
-                """, errorTitle, realMessage, solution);
 
-                DatabaseInitializationException error = new DatabaseInitializationException(
-                        "Falha ao iniciar Pool de Conexão: " + realMessage, e);
-                ManagedApplication.reportError(error);
-                throw error;
+                ManagedApplication.reportError(errorToThrow);
+                throw errorToThrow;
             } catch (Exception e) {
                 log.error("""
                 
@@ -178,11 +186,31 @@ public class HibernateConfiguration {
                 > Mensagem: {}
                 """, e.getClass().getSimpleName(), e.getMessage());
 
-                DatabaseInitializationException error = new DatabaseInitializationException("Erro crítico desconhecido ao configurar base de dados.", e);
+                UnexpectedDatabaseException error = new UnexpectedDatabaseException(e);
                 ManagedApplication.reportError(error);
                 throw error;
             }
         });
+    }
+
+    private boolean isIsAuthError(HikariPool.PoolInitializationException e, SQLException sqlException) {
+        boolean isAuthError = false;
+        String sqlState = "";
+
+        if (sqlException != null) {
+            sqlState = sqlException.getSQLState();
+            if (sqlState != null && sqlState.startsWith("28")) {
+                isAuthError = true;
+            }
+        }
+
+        if (!isAuthError) {
+            String msg = e.getMessage().toLowerCase();
+            if (msg.contains("access denied") || msg.contains("authentication failed")) {
+                isAuthError = true;
+            }
+        }
+        return isAuthError;
     }
 
     private HikariConfig getHikariConfig(DatabaseConfiguration databaseConfiguration) {
@@ -304,6 +332,18 @@ public class HibernateConfiguration {
             return str.substring(0, length);
         }
         return String.format("%-" + length + "s", str);
+    }
+
+    private SQLException findSQLException(Throwable t) {
+        Throwable current = t;
+        while (current != null) {
+            if (current instanceof SQLException sqlEx) {
+                return sqlEx;
+            }
+            current = current.getCause();
+            if (current == t) break;
+        }
+        return null;
     }
 
 }
